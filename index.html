@@ -16,7 +16,7 @@
     align-items: center;
     padding: 14px;
   }
-  h2 { color: #facc15; font-size: 17px; margin-bottom: 10px; letter-spacing: 0.5px; text-align: center; }
+  h2 { color: #facc15; font-size: 17px; margin-bottom: 10px; text-align: center; }
   .panel {
     background: #18181b;
     padding: 12px;
@@ -26,23 +26,21 @@
     margin-bottom: 14px;
     border: 1px solid #2e2e34;
   }
-  .hint { font-size: 11px; color: #a1a1aa; margin-bottom: 8px; line-height: 1.4; }
   .file-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; }
   .file-box { background: #222227; padding: 6px; border-radius: 6px; font-size: 10px; color: #d4d4d8; text-align: center; }
   .file-box input { width: 100%; margin-top: 4px; font-size: 9px; }
-  .btn-row { display: flex; gap: 10px; }
+  .btn-row { display: flex; gap: 8px; }
   button {
     flex: 1;
-    padding: 11px;
+    padding: 11px 6px;
     border: none;
     border-radius: 8px;
     font-weight: 800;
-    font-size: 13px;
+    font-size: 12px;
     cursor: pointer;
-    transition: transform 0.1s;
   }
-  button:active { transform: scale(0.97); }
   #playBtn { background: #2563eb; color: #fff; }
+  #stopBtn { background: #ef4444; color: #fff; flex: 0.5; }
   #exportBtn { background: #facc15; color: #09090b; }
   button:disabled { opacity: 0.45; }
   #status { font-size: 12px; color: #4ade80; margin-top: 8px; text-align: center; font-weight: 600; }
@@ -61,33 +59,37 @@
 <h2>🎬 VOX PRO ENGINE // வரலாற்று மர்மம் (30s)</h2>
 
 <div class="panel">
-  <div class="hint">💡 படங்கள் அப்லோட் செய்யாமலேயே Map, Infographics & 2.5D Layers ஓடும். விருப்பமிருந்தால் 3 படங்கள் சேர்க்கலாம்:</div>
   <div class="file-row">
     <div class="file-box">1. கோவில் முழு படம்<input type="file" id="img0" accept="image/*"></div>
     <div class="file-box">2. கோபுர உச்சி கல்<input type="file" id="img1" accept="image/*"></div>
     <div class="file-box">3. சோழர் சிற்பம்<input type="file" id="img2" accept="image/*"></div>
   </div>
   <div class="btn-row">
-    <button id="playBtn">▶ Preview (30s)</button>
-    <button id="exportBtn">⬇ Export Pro Video</button>
+    <button id="playBtn" onclick="startPreview()">▶ Preview</button>
+    <button id="stopBtn" onclick="stopAll()">⏹ Stop</button>
+    <button id="exportBtn" onclick="startExport()">⬇ Export</button>
   </div>
   <div id="status">தயார்! Preview அல்லது Export அழுத்தவும்</div>
 </div>
 
-<canvas id="voxCanvas" width="1080" height="1920"></canvas>
+<canvas id="voxCanvas" width="720" height="1280"></canvas>
 
 <script>
 const canvas = document.getElementById('voxCanvas');
 const ctx = canvas.getContext('2d');
 const statusEl = document.getElementById('status');
 
+const W = 720;
+const H = 1280;
 const DURATION = 30;
 const FPS = 30;
+
 let userImgs = [null, null, null];
-let isPlaying = false;
+let animTimer = null;
+let mediaRecorder = null;
 let startTime = 0;
 
-// Load optional user images
+// Load images
 [0, 1, 2].forEach(idx => {
   document.getElementById(`img${idx}`).addEventListener('change', e => {
     const file = e.target.files[0];
@@ -95,405 +97,350 @@ let startTime = 0;
     const reader = new FileReader();
     reader.onload = ev => {
       const img = new Image();
-      img.onload = () => { userImgs[idx] = img; drawFrame(0); };
+      img.onload = () => { userImgs[idx] = img; drawFrame(0); statusEl.textContent = `✅ படம் ${idx+1} சேர்க்கப்பட்டது!`; };
       img.src = ev.target.result;
     };
     reader.readAsDataURL(file);
   });
 });
 
-// Pre-generate procedural Film Grain & Torn Edge Noise
+// Lightweight Film Grain (Generated once for fast mobile playback)
 const grainCanvas = document.createElement('canvas');
-grainCanvas.width = 270; grainCanvas.height = 480;
+grainCanvas.width = 180; grainCanvas.height = 320;
 const gCtx = grainCanvas.getContext('2d');
-function refreshGrain() {
-  const imgData = gCtx.createImageData(270, 480);
-  const d = imgData.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const v = Math.random() * 255;
-    d[i] = v; d[i+1] = v; d[i+2] = v; d[i+3] = 16;
-  }
-  gCtx.putImageData(imgData, 0, 0);
+const imgData = gCtx.createImageData(180, 320);
+for (let i = 0; i < imgData.data.length; i += 4) {
+  const v = Math.random() * 255;
+  imgData.data[i] = v; imgData.data[i+1] = v; imgData.data[i+2] = v; imgData.data[i+3] = 14;
 }
-refreshGrain();
+gCtx.putImageData(imgData, 0, 0);
 
-// Word-by-word Kinetic Subtitles Synced to 30s
 const captions = [
-  { start: 0.2, end: 3.5, words: ["ஆயிரம்", "ஆண்டுகளுக்கு", "முன்பு", "கட்டப்பட்ட", "தஞ்சை", "பெரிய", "கோவில்..."] },
+  { start: 0.0, end: 3.5, words: ["ஆயிரம்", "ஆண்டுகளுக்கு", "முன்பு", "கட்டப்பட்ட", "தஞ்சை", "பெரிய", "கோவில்..."] },
   { start: 3.5, end: 7.0, words: ["இன்றும்", "பொறியாளர்களை", "அதிர", "வைக்கும்", "ஒரு", "மர்மம்!"] },
-  { start: 7.2, end: 11.2, words: ["60", "கிலோமீட்டர்", "தொலைவிலிருந்து", "கொண்டு", "வரப்பட்ட", "கற்கள்..."] },
+  { start: 7.0, end: 11.2, words: ["60", "கிலோமீட்டர்", "தொலைவிலிருந்து", "கொண்டு", "வரப்பட்ட", "கற்கள்..."] },
   { start: 11.2, end: 15.0, words: ["216", "அடி", "உயரத்தில்", "நிழலே", "விழாத", "அதிசயம்!"] },
-  { start: 15.2, end: 19.2, words: ["கோபுர", "உச்சியில்", "இருக்கும்", "80", "டன்", "ஒற்றைக்", "கல்..."] },
+  { start: 15.0, end: 19.2, words: ["கோபுர", "உச்சியில்", "இருக்கும்", "80", "டன்", "ஒற்றைக்", "கல்..."] },
   { start: 19.2, end: 23.0, words: ["கிரேன்கள்", "இல்லாத", "காலத்தில்", "எப்படி", "மேலே", "சென்றது?"] },
-  { start: 23.2, end: 26.8, words: ["அஸ்திவாரமே", "இல்லாமல்", "புவியீர்ப்பு", "விசையை", "வென்ற..."] },
+  { start: 23.0, end: 26.8, words: ["அஸ்திவாரமே", "இல்லாமல்", "புவியீர்ப்பு", "விசையை", "வென்ற..."] },
   { start: 26.8, end: 30.0, words: ["சோழர்களின்", "அறிவியல்", "வரலாற்றின்", "அழியாத", "சாதனை!"] }
 ];
 
-// Helper: Torn Paper Polygon Clip/Frame
 function drawTornCard(x, y, w, h, seed, drawContentFn) {
   ctx.save();
-  const jag = 12;
-  const step = 28;
+  const jag = 8;
+  const step = 20;
   ctx.beginPath();
-  // Top torn edge
   for (let px = x; px <= x + w; px += step) {
-    const dy = Math.sin(px * 0.13 + seed) * jag;
+    const dy = Math.sin(px * 0.15 + seed) * jag;
     if (px === x) ctx.moveTo(px, y + dy);
     else ctx.lineTo(px, y + dy);
   }
-  // Right edge
   ctx.lineTo(x + w, y + h);
-  // Bottom torn edge
   for (let px = x + w; px >= x; px -= step) {
-    const dy = Math.cos(px * 0.17 + seed) * jag;
+    const dy = Math.cos(px * 0.19 + seed) * jag;
     ctx.lineTo(px, y + h + dy);
   }
   ctx.closePath();
 
-  // Drop Shadow
   ctx.save();
-  ctx.translate(18, 22);
-  ctx.fillStyle = "rgba(0,0,0,0.32)";
+  ctx.translate(12, 15);
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
   ctx.fill();
   ctx.restore();
 
-  // Paper Border
   ctx.fillStyle = "#faf6ee";
   ctx.fill();
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 3;
   ctx.strokeStyle = "#d6cfc2";
   ctx.stroke();
 
-  // Clip inner content
   ctx.clip();
   drawContentFn();
   ctx.restore();
 }
 
-// Background Parchment + Blueprint Grid + Camera Micro-Shake
 function applyCameraAndBackground(t) {
-  const shakeX = Math.sin(t * 2.3) * 5 + Math.cos(t * 5.1) * 2;
-  const shakeY = Math.cos(t * 1.9) * 5 + Math.sin(t * 4.7) * 2;
+  const shakeX = Math.sin(t * 2.3) * 3.5;
+  const shakeY = Math.cos(t * 1.9) * 3.5;
   ctx.save();
   ctx.translate(shakeX, shakeY);
 
-  // Vintage Parchment Base
-  const grad = ctx.createRadialGradient(540, 960, 100, 540, 960, 1200);
-  grad.addColorStop(0, "#f5f0e6");
-  grad.addColorStop(1, "#dfd6c3");
-  ctx.fillStyle = grad;
-  ctx.fillRect(-30, -30, 1140, 1980);
+  ctx.fillStyle = "#efe8d8";
+  ctx.fillRect(-20, -20, W + 40, H + 40);
 
-  // Architectural Blueprint Lines
   ctx.strokeStyle = "rgba(120, 100, 70, 0.12)";
-  ctx.lineWidth = 2;
-  const shift = (t * 20) % 60;
-  for (let x = shift; x < 1100; x += 60) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 1920); ctx.stroke();
+  ctx.lineWidth = 1.5;
+  const shift = (t * 15) % 40;
+  for (let x = shift; x < W + 40; x += 40) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
   }
-  for (let y = shift; y < 1940; y += 60) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(1100, y); ctx.stroke();
+  for (let y = shift; y < H + 40; y += 40) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   }
 
-  // Top Editorial Header
   ctx.fillStyle = "#141417";
-  ctx.fillRect(0, 0, 1080, 105);
+  ctx.fillRect(0, 0, W, 72);
   ctx.fillStyle = "#facc15";
-  ctx.fillRect(55, 30, 16, 45);
+  ctx.fillRect(36, 20, 12, 32);
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 32px 'Space Mono', monospace";
+  ctx.font = "bold 22px 'Space Mono', monospace";
   ctx.textAlign = "left";
-  ctx.fillText("VOX ARCHIVE // CHOLA MYSTERY", 88, 63);
+  ctx.fillText("VOX ARCHIVE // CHOLA MYSTERY", 58, 43);
 
   ctx.fillStyle = "#dc2626";
-  ctx.fillRect(850, 30, 175, 45);
+  ctx.fillRect(560, 20, 120, 32);
   ctx.fillStyle = "#fff";
-  ctx.font = "bold 26px 'Space Mono', monospace";
-  ctx.fillText("1010 AD", 882, 61);
+  ctx.font = "bold 18px 'Space Mono', monospace";
+  ctx.fillText("1010 AD", 582, 42);
 }
 
-// SCENE 1 (0 - 7s): 2.5D Parallax Temple + Timeline
 function renderScene1(t) {
   const p = t / 7;
-  // Animated 1010 AD Timeline Bar at Top
   ctx.fillStyle = "#18181b";
-  ctx.fillRect(70, 145, 940, 70);
+  ctx.fillRect(46, 95, 628, 48);
   ctx.strokeStyle = "#facc15";
-  ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(110, 180); ctx.lineTo(970, 180); ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(75, 120); ctx.lineTo(645, 120); ctx.stroke();
 
   const years = ["985 AD", "1003 AD", "1010 AD", "2026 AD"];
   years.forEach((yr, i) => {
-    const x = 140 + i * 260;
+    const x = 95 + i * 172;
     const active = p >= i * 0.22;
     ctx.fillStyle = active ? "#facc15" : "#52525b";
-    ctx.beginPath(); ctx.arc(x, 180, active ? 12 : 7, 0, Math.PI * 2); ctx.fill();
-    ctx.font = "bold 24px 'Space Mono'";
-    ctx.fillText(yr, x - 42, 160);
+    ctx.beginPath(); ctx.arc(x, 120, active ? 8 : 5, 0, Math.PI * 2); ctx.fill();
+    ctx.font = "bold 16px 'Space Mono'";
+    ctx.fillText(yr, x - 28, 108);
   });
 
-  // 2.5D Parallax Cutout Card
-  drawTornCard(80, 260, 920, 880, 1.2, () => {
-    // Layer 1: Sky / Sun (Moves Slow)
-    const skyGrad = ctx.createLinearGradient(80, 260, 80, 1140);
+  drawTornCard(52, 172, 616, 585, 1.2, () => {
+    const skyGrad = ctx.createLinearGradient(52, 172, 52, 757);
     skyGrad.addColorStop(0, "#1e293b");
     skyGrad.addColorStop(0.6, "#b45309");
     skyGrad.addColorStop(1, "#f59e0b");
     ctx.fillStyle = skyGrad;
-    ctx.fillRect(80, 260, 920, 880);
+    ctx.fillRect(52, 172, 616, 585);
 
-    // Sun Disk Parallax
     ctx.fillStyle = "rgba(254, 240, 138, 0.85)";
     ctx.beginPath();
-    ctx.arc(760 - p * 90, 460 + p * 30, 110, 0, Math.PI * 2);
+    ctx.arc(510 - p * 60, 305 + p * 20, 72, 0, Math.PI * 2);
     ctx.fill();
 
     if (userImgs[0]) {
-      // Background & Foreground 2.5D Split Simulation
-      const scaleBg = 1.05 + p * 0.1;
+      const scaleBg = 1.04 + p * 0.14;
       ctx.save();
-      ctx.translate(540 - p * 40, 700);
+      ctx.translate(360 - p * 25, 465);
       ctx.scale(scaleBg, scaleBg);
-      ctx.drawImage(userImgs[0], -460, -440, 920, 880);
+      ctx.drawImage(userImgs[0], -308, -292, 616, 585);
       ctx.restore();
     } else {
-      // Procedural 2.5D Layered Temple Silhouette (Midground + Foreground)
-      // Midground Mandapam (Medium Speed)
       ctx.save();
-      ctx.translate(-p * 55, 0);
+      ctx.translate(-p * 35, 0);
       ctx.fillStyle = "#451a03";
-      ctx.fillRect(120, 860, 880, 280);
+      ctx.fillRect(80, 570, 580, 190);
       ctx.restore();
 
-      // Foreground 13-Tier Vimana Tower (Fast Zoom & Parallax)
       ctx.save();
-      ctx.translate(540 + p * 45, 1120);
+      ctx.translate(360 + p * 30, 745);
       ctx.scale(1 + p * 0.16, 1 + p * 0.16);
       ctx.fillStyle = "#271003";
       for (let tier = 0; tier < 13; tier++) {
-        const w = 380 - tier * 24;
-        const y = -tier * 46 - 46;
-        ctx.fillRect(-w / 2, y, w, 42);
-        // Gold highlights on tiers
+        const w = 250 - tier * 16;
+        const y = -tier * 30 - 30;
+        ctx.fillRect(-w / 2, y, w, 28);
         ctx.fillStyle = "#d97706";
-        ctx.fillRect(-w / 2, y, w, 6);
+        ctx.fillRect(-w / 2, y, w, 4);
         ctx.fillStyle = "#271003";
       }
-      // Kalasam Dome
-      ctx.beginPath(); ctx.arc(0, -640, 42, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, -425, 28, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "#facc15";
-      ctx.beginPath(); ctx.moveTo(-10, -680); ctx.lineTo(0, -740); ctx.lineTo(10, -680); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-7, -450); ctx.lineTo(0, -490); ctx.lineTo(7, -450); ctx.fill();
       ctx.restore();
     }
 
-    // Vox Cutout Label Badge
     ctx.fillStyle = "#facc15";
-    ctx.fillRect(110, 295, 360, 54);
+    ctx.fillRect(74, 196, 250, 38);
     ctx.fillStyle = "#000";
-    ctx.font = "800 30px 'Noto Sans Tamil'";
-    ctx.fillText("216 அடி பிரம்மாண்டம்", 130, 332);
+    ctx.font = "800 20px 'Noto Sans Tamil'";
+    ctx.fillText("216 அடி பிரம்மாண்டம்", 88, 222);
   });
 }
 
-// SCENE 2 (7 - 15s): Animated Map Zoom & Red Route Line
 function renderScene2(localT) {
   const p = Math.min(localT / 8, 1);
 
-  drawTornCard(80, 220, 920, 940, 3.4, () => {
-    // Dark Topographic Map Base
+  drawTornCard(52, 148, 616, 625, 3.4, () => {
     ctx.fillStyle = "#1c242b";
-    ctx.fillRect(80, 220, 920, 940);
+    ctx.fillRect(52, 148, 616, 625);
 
-    // Map Zoom Transform
     ctx.save();
-    const zoom = 1 + p * 0.45;
-    ctx.translate(540, 680);
+    const zoom = 1 + p * 0.42;
+    ctx.translate(360, 455);
     ctx.scale(zoom, zoom);
-    ctx.translate(-540 + p * 40, -680 + p * 30);
+    ctx.translate(-360 + p * 25, -455 + p * 20);
 
-    // Stylized Tamil Nadu Coastline & Cauvery River
     ctx.strokeStyle = "#38bdf8";
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(150, 450);
-    ctx.quadraticCurveTo(450, 490, 880, 430);
+    ctx.moveTo(100, 300);
+    ctx.quadraticCurveTo(300, 330, 585, 285);
     ctx.stroke();
     ctx.fillStyle = "#38bdf8";
-    ctx.font = "bold 20px 'Space Mono'";
-    ctx.fillText("CAUVERY RIVER", 620, 415);
+    ctx.font = "bold 14px 'Space Mono'";
+    ctx.fillText("CAUVERY RIVER", 410, 275);
 
-    // Topographic Contour Rings
     ctx.strokeStyle = "rgba(255,255,255,0.1)";
-    ctx.lineWidth = 2;
-    for (let r = 80; r <= 400; r += 80) {
-      ctx.beginPath(); ctx.arc(320, 780, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 1.5;
+    for (let r = 55; r <= 270; r += 55) {
+      ctx.beginPath(); ctx.arc(215, 520, r, 0, Math.PI * 2); ctx.stroke();
     }
 
-    // Route Line: Narthamalai Quarry -> Thanjavur Temple (60 KM)
-    const startX = 280, startY = 820;
-    const endX = 740, endY = 540;
+    const startX = 185, startY = 545;
+    const endX = 495, endY = 360;
     const routeProg = Math.min(p * 1.4, 1);
 
-    // Dashed Background Path
-    ctx.setLineDash([14, 10]);
+    ctx.setLineDash([10, 8]);
     ctx.strokeStyle = "rgba(250, 204, 21, 0.35)";
-    ctx.lineWidth = 8;
+    ctx.lineWidth = 6;
     ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(endX, endY); ctx.stroke();
 
-    // Animated Red/Yellow Active Route Line
     ctx.setLineDash([]);
     ctx.strokeStyle = "#ef4444";
-    ctx.lineWidth = 10;
+    ctx.lineWidth = 7;
     ctx.beginPath();
     ctx.moveTo(startX, startY);
     ctx.lineTo(startX + (endX - startX) * routeProg, startY + (endY - startY) * routeProg);
     ctx.stroke();
 
-    // Origin Pin (Narthamalai)
     ctx.fillStyle = "#facc15";
-    ctx.beginPath(); ctx.arc(startX, startY, 16, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(startX, startY, 11, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "#fff";
-    ctx.font = "800 26px 'Noto Sans Tamil'";
-    ctx.fillText("நார்த்தாமலை (கல் குவாரி)", startX - 90, startY + 52);
+    ctx.font = "800 17px 'Noto Sans Tamil'";
+    ctx.fillText("நார்த்தாமலை (கல் குவாரி)", startX - 60, startY + 36);
 
-    // Destination Pin (Thanjavur)
     if (routeProg > 0.85) {
-      const pulse = 18 + Math.sin(localT * 10) * 6;
+      const pulse = 12 + Math.sin(localT * 10) * 4;
       ctx.fillStyle = "rgba(239, 68, 68, 0.35)";
-      ctx.beginPath(); ctx.arc(endX, endY, pulse + 14, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(endX, endY, pulse + 10, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "#ef4444";
-      ctx.beginPath(); ctx.arc(endX, endY, 18, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(endX, endY, 12, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "#facc15";
-      ctx.fillText("தஞ்சாவூர் கோவில்", endX - 110, endY - 32);
+      ctx.fillText("தஞ்சாவூர் கோவில்", endX - 75, endY - 22);
     }
     ctx.restore();
 
-    // Distance Callout Box
     ctx.fillStyle = "#facc15";
-    ctx.fillRect(110, 255, 430, 62);
+    ctx.fillRect(74, 170, 290, 42);
     ctx.fillStyle = "#000";
-    ctx.font = "800 32px 'Noto Sans Tamil'";
-    ctx.fillText("📍 தூரம்: 60 கி.மீ பயணம்", 130, 297);
+    ctx.font = "800 21px 'Noto Sans Tamil'";
+    ctx.fillText("📍 தூரம்: 60 கி.மீ பயணம்", 88, 198);
   });
 }
 
-// SCENE 3 (15 - 23s): Animated Scale & Weight Infographics
 function renderScene3(localT) {
-  const p = Math.min(localT / 8, 1);
   const barAnim = Math.min(localT * 1.2, 1);
 
-  drawTornCard(80, 220, 920, 940, 5.8, () => {
+  drawTornCard(52, 148, 616, 625, 5.8, () => {
     ctx.fillStyle = "#18181b";
-    ctx.fillRect(80, 220, 920, 940);
+    ctx.fillRect(52, 148, 616, 625);
 
-    // Grid inside chart
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
-    for (let y = 340; y <= 1020; y += 110) {
-      ctx.beginPath(); ctx.moveTo(120, y); ctx.lineTo(960, y); ctx.stroke();
+    for (let y = 225; y <= 680; y += 75) {
+      ctx.beginPath(); ctx.moveTo(80, y); ctx.lineTo(640, y); ctx.stroke();
     }
 
     ctx.fillStyle = "#facc15";
-    ctx.font = "800 36px 'Noto Sans Tamil'";
-    ctx.fillText("📊 பிரம்மாண்ட ஒப்பீடு (SCALE DATA)", 120, 295);
+    ctx.font = "800 24px 'Noto Sans Tamil'";
+    ctx.fillText("📊 பிரம்மாண்ட ஒப்பீடு (SCALE DATA)", 80, 198);
 
-    // Bar 1: Normal Temple vs Thanjavur (216 Feet)
-    const h1 = 180 * barAnim;
-    const h2 = 520 * barAnim;
+    const h1 = 120 * barAnim;
+    const h2 = 345 * barAnim;
 
-    // Normal Building Bar
     ctx.fillStyle = "#52525b";
-    ctx.fillRect(190, 960 - h1, 160, h1);
+    ctx.fillRect(125, 640 - h1, 105, h1);
     ctx.fillStyle = "#d4d4d8";
-    ctx.font = "bold 28px 'Noto Sans Tamil'";
-    ctx.fillText("சாதாரண கோபுரம்", 165, 1005);
-    ctx.fillText("60 அடி", 220, 960 - h1 - 18);
+    ctx.font = "bold 18px 'Noto Sans Tamil'";
+    ctx.fillText("சாதாரண கோபுரம்", 108, 672);
+    ctx.fillText("60 அடி", 145, 640 - h1 - 12);
 
-    // Thanjavur 216 ft Bar
     ctx.fillStyle = "#facc15";
-    ctx.fillRect(430, 960 - h2, 180, h2);
+    ctx.fillRect(285, 640 - h2, 120, h2);
     ctx.fillStyle = "#facc15";
-    ctx.font = "800 32px 'Noto Sans Tamil'";
-    ctx.fillText("தஞ்சை கோபுரம்", 415, 1005);
-    ctx.fillText("216 அடி!", 450, 960 - h2 - 20);
+    ctx.font = "800 21px 'Noto Sans Tamil'";
+    ctx.fillText("தஞ்சை கோபுரம்", 275, 672);
+    ctx.fillText("216 அடி!", 300, 640 - h2 - 14);
 
-    // Right Side: 80-Ton Capstone Card
     ctx.fillStyle = "#27272a";
-    ctx.fillRect(660, 420, 290, 540);
+    ctx.fillRect(440, 280, 195, 360);
     ctx.strokeStyle = "#ef4444";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(660, 420, 290, 540);
+    ctx.lineWidth = 3;
+    ctx.strokeRect(440, 280, 195, 360);
 
     if (userImgs[1]) {
-      ctx.drawImage(userImgs[1], 680, 440, 250, 240);
+      ctx.drawImage(userImgs[1], 454, 294, 167, 160);
     } else {
-      // Drawn 80-Ton Monolith Block
       ctx.fillStyle = "#a8a29e";
       ctx.beginPath();
-      ctx.arc(805, 580, 85, Math.PI, 0);
-      ctx.fillRect(720, 580, 170, 55);
+      ctx.arc(537, 385, 56, Math.PI, 0);
+      ctx.fillRect(481, 385, 112, 36);
       ctx.fill();
     }
 
     ctx.fillStyle = "#ef4444";
-    ctx.font = "900 48px 'Space Mono'";
-    ctx.fillText("80 TONS", 695, 755);
+    ctx.font = "900 32px 'Space Mono'";
+    ctx.fillText("80 TONS", 464, 502);
     ctx.fillStyle = "#fff";
-    ctx.font = "800 28px 'Noto Sans Tamil'";
-    ctx.fillText("ஒற்றைக் கல்!", 715, 805);
+    ctx.font = "800 19px 'Noto Sans Tamil'";
+    ctx.fillText("ஒற்றைக் கல்!", 478, 536);
     ctx.fillStyle = "#facc15";
-    ctx.font = "600 24px 'Noto Sans Tamil'";
-    ctx.fillText("= 16 யானைகளின்", 695, 865);
-    ctx.fillText("மொத்த எடை!", 715, 905);
+    ctx.font = "600 16px 'Noto Sans Tamil'";
+    ctx.fillText("= 16 யானைகளின்", 464, 575);
+    ctx.fillText("மொத்த எடை!", 478, 602);
   });
 }
 
-// SCENE 4 (23 - 30s): Climax Cutout + Interlocking Tech
 function renderScene4(localT) {
   const p = Math.min(localT / 7, 1);
 
-  drawTornCard(80, 220, 920, 940, 8.1, () => {
+  drawTornCard(52, 148, 616, 625, 8.1, () => {
     if (userImgs[2]) {
       ctx.save();
-      ctx.translate(540, 690);
-      ctx.scale(1.05 + p * 0.18, 1.05 + p * 0.18);
-      ctx.drawImage(userImgs[2], -460, -470, 920, 940);
+      ctx.translate(360, 460);
+      ctx.scale(1.04 + p * 0.16, 1.04 + p * 0.16);
+      ctx.drawImage(userImgs[2], -308, -312, 616, 625);
       ctx.restore();
     } else {
-      // Interlocking Stone Blocks Animation
       ctx.fillStyle = "#1c1917";
-      ctx.fillRect(80, 220, 920, 940);
-      const slide = Math.max(0, (1 - localT * 1.5)) * 180;
+      ctx.fillRect(52, 148, 616, 625);
+      const slide = Math.max(0, (1 - localT * 1.5)) * 120;
 
       ctx.fillStyle = "#78716c";
-      ctx.fillRect(160 - slide, 450, 360, 220);
+      ctx.fillRect(108 - slide, 300, 240, 145);
       ctx.fillStyle = "#a8a29e";
-      ctx.fillRect(540 + slide, 450, 360, 220);
+      ctx.fillRect(360 + slide, 300, 240, 145);
       ctx.fillStyle = "#57534e";
-      ctx.fillRect(240, 690 + slide, 600, 220);
+      ctx.fillRect(160, 460 + slide, 400, 145);
 
-      // Gold Puzzle Lock Highlight
-      if (slide < 10) {
+      if (slide < 8) {
         ctx.strokeStyle = "#facc15";
-        ctx.lineWidth = 8;
-        ctx.strokeRect(515, 480, 45, 160);
+        ctx.lineWidth = 5;
+        ctx.strokeRect(344, 320, 30, 105);
       }
     }
 
-    // Stamp Badge
     ctx.save();
-    ctx.translate(540, 340);
-    ctx.rotate(-0.04);
+    ctx.translate(360, 228);
+    ctx.rotate(-0.03);
     ctx.fillStyle = "#dc2626";
-    ctx.fillRect(-360, -45, 720, 90);
+    ctx.fillRect(-250, -30, 500, 60);
     ctx.fillStyle = "#fff";
-    ctx.font = "900 38px 'Noto Sans Tamil'";
+    ctx.font = "900 24px 'Noto Sans Tamil'";
     ctx.textAlign = "center";
-    ctx.fillText("சிமெண்ட் இல்லை • அஸ்திவாரம் இல்லை!", 0, 14);
+    ctx.fillText("சிமெண்ட் இல்லை • அஸ்திவாரம் இல்லை!", 0, 9);
     ctx.restore();
   });
 }
 
-// Word-by-Word Kinetic Subtitles Engine
 function renderKineticSubtitles(t) {
   const cap = captions.find(c => t >= c.start && t <= c.end);
   if (!cap) return;
@@ -501,124 +448,136 @@ function renderKineticSubtitles(t) {
   const progress = (t - cap.start) / (cap.end - cap.start);
   const activeIdx = Math.min(Math.floor(progress * cap.words.length), cap.words.length - 1);
 
-  const boxY = 1260;
-  ctx.textAlign = "left";
-  ctx.font = "900 54px 'Noto Sans Tamil'";
+  let cursorX = 56;
+  let cursorY = 840;
+  const maxW = 608;
 
-  let cursorX = 85;
-  let cursorY = boxY;
-  const maxW = 910;
+  ctx.textAlign = "left";
+  ctx.font = "900 35px 'Noto Sans Tamil'";
 
   cap.words.forEach((word, i) => {
-    const wWidth = ctx.measureText(word).width + 26;
-    if (cursorX + wWidth > 85 + maxW) {
-      cursorX = 85;
-      cursorY += 96;
+    const wWidth = ctx.measureText(word).width + 18;
+    if (cursorX + wWidth > 56 + maxW) {
+      cursorX = 56;
+      cursorY += 64;
     }
 
     const isCurrent = i === activeIdx;
     const isPast = i < activeIdx;
 
     if (isCurrent) {
-      // Pop-up Yellow Highlighter Box
       ctx.save();
-      ctx.translate(cursorX + wWidth / 2, cursorY - 22);
-      ctx.scale(1.08, 1.08);
+      ctx.translate(cursorX + wWidth / 2, cursorY - 14);
+      ctx.scale(1.06, 1.06);
       ctx.fillStyle = "#facc15";
-      ctx.fillRect(-wWidth / 2, -44, wWidth, 76);
+      ctx.fillRect(-wWidth / 2, -30, wWidth, 50);
       ctx.fillStyle = "#000000";
       ctx.textAlign = "center";
-      ctx.fillText(word, 0, 14);
+      ctx.fillText(word, 0, 9);
       ctx.restore();
     } else {
       ctx.fillStyle = isPast ? "#18181b" : "rgba(24, 24, 27, 0.45)";
-      ctx.fillText(word, cursorX + 10, cursorY - 8);
+      ctx.fillText(word, cursorX + 6, cursorY - 5);
     }
 
-    cursorX += wWidth + 10;
+    cursorX += wWidth + 6;
   });
 }
 
-// Film Grain + Bottom Progress Bar
 function renderOverlays(t) {
-  // Film Grain
-  ctx.drawImage(grainCanvas, 0, 0, 1080, 1920);
+  ctx.drawImage(grainCanvas, 0, 0, W, H);
 
-  // Subtle Vignette
-  const vig = ctx.createRadialGradient(540, 960, 500, 540, 960, 1150);
-  vig.addColorStop(0, "rgba(0,0,0,0)");
-  vig.addColorStop(1, "rgba(0,0,0,0.28)");
-  ctx.fillStyle = vig;
-  ctx.fillRect(0, 0, 1080, 1920);
-
-  // Bottom Timeline Bar
   ctx.fillStyle = "rgba(0,0,0,0.2)";
-  ctx.fillRect(80, 1815, 920, 14);
+  ctx.fillRect(52, 1210, 616, 10);
   ctx.fillStyle = "#dc2626";
-  ctx.fillRect(80, 1815, 920 * Math.min(t / DURATION, 1), 14);
+  ctx.fillRect(52, 1210, 616 * Math.min(t / DURATION, 1), 10);
 }
 
 function drawFrame(t) {
-  if (Math.floor(t * 15) % 2 === 0) refreshGrain();
   applyCameraAndBackground(t);
-
   if (t < 7) renderScene1(t);
   else if (t < 15) renderScene2(t - 7);
   else if (t < 23) renderScene3(t - 15);
   else renderScene4(t - 23);
-
   renderKineticSubtitles(t);
   renderOverlays(t);
   ctx.restore();
 }
 
-// Preview
-document.getElementById('playBtn').addEventListener('click', () => {
-  if (isPlaying) return;
-  isPlaying = true;
-  startTime = performance.now();
-  statusEl.textContent = "▶ Vox Pro Preview ஓடுகிறது (30s)...";
+function stopAll() {
+  if (animTimer) { clearInterval(animTimer); animTimer = null; }
+  if (mediaRecorder && mediaRecorder.state === "recording") { mediaRecorder.stop(); }
+  document.getElementById('playBtn').disabled = false;
+  document.getElementById('exportBtn').disabled = false;
+  drawFrame(0);
+  statusEl.textContent = "⏹ நிறுத்தப்பட்டது (Reset)";
+}
 
-  function loop(now) {
-    const elapsed = (now - startTime) / 1000;
+function startPreview() {
+  stopAll();
+  document.getElementById('playBtn').disabled = true;
+  startTime = Date.now();
+  statusEl.textContent = "▶ Preview ஓடுகிறது: 0s / 30s";
+
+  animTimer = setInterval(() => {
+    const elapsed = (Date.now() - startTime) / 1000;
     if (elapsed >= DURATION) {
       drawFrame(DURATION - 0.01);
-      isPlaying = false;
+      clearInterval(animTimer);
+      animTimer = null;
+      document.getElementById('playBtn').disabled = false;
       statusEl.textContent = "✅ Preview முடிந்தது! Export அழுத்தவும்.";
       return;
     }
     drawFrame(elapsed);
-    requestAnimationFrame(loop);
-  }
-  requestAnimationFrame(loop);
-});
+    statusEl.textContent = `▶ Preview ஓடுகிறது: ${Math.floor(elapsed)}s / 30s`;
+  }, 1000 / FPS);
+}
 
-// Export Video
-document.getElementById('exportBtn').addEventListener('click', () => {
-  if (isPlaying) return;
-  isPlaying = true;
+function startExport() {
+  stopAll();
   document.getElementById('playBtn').disabled = true;
   document.getElementById('exportBtn').disabled = true;
 
   const stream = canvas.captureStream(FPS);
-  const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 6000000 });
+  const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+  mediaRecorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 4500000 });
   const chunks = [];
 
-  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-  recorder.onstop = () => {
-    const blob = new Blob(chunks, { type: 'video/webm' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'vox_pro_thanjavur_30s.webm';
-    a.click();
-    isPlaying = false;
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    if (chunks.length > 0) {
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'vox_pro_thanjavur_30s.webm';
+      a.click();
+      statusEl.textContent = "✅ Pro Video டவுன்லோட் ஆகிவிட்டது!";
+    }
     document.getElementById('playBtn').disabled = false;
     document.getElementById('exportBtn').disabled = false;
-    statusEl.textContent = "✅ Pro Video டவுன்லோட் ஆகிவிட்டது!";
   };
 
-  recorder.start();
-  startTime = performance.now();
-  statusEl.textContent = "⏳ Pro Video ரெக்கார்ட் ஆகிறது (30s)...";
-  
+  mediaRecorder.start();
+  startTime = Date.now();
+  statusEl.textContent = "⏳ Export ரெக்கார்டிங்: 0s / 30s";
+
+  animTimer = setInterval(() => {
+    const elapsed = (Date.now() - startTime) / 1000;
+    if (elapsed >= DURATION) {
+      drawFrame(DURATION - 0.01);
+      clearInterval(animTimer);
+      animTimer = null;
+      mediaRecorder.stop();
+      return;
+    }
+    drawFrame(elapsed);
+    statusEl.textContent = `⏳ Export ரெக்கார்டிங்: ${Math.floor(elapsed)}s / 30s`;
+  }, 1000 / FPS);
+}
+
+drawFrame(0);
+</script>
+</body>
+</html>
