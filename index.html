@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vox Style History Video Maker (30s)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@600;800&family=Space+Mono:wght@700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #121212;
+    color: #fff;
+    font-family: 'Noto Sans Tamil', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 15px;
+  }
+  h2 { color: #facc15; font-size: 18px; margin-bottom: 10px; text-align: center; }
+  .controls {
+    background: #1e1e1e;
+    padding: 12px;
+    border-radius: 10px;
+    width: 100%;
+    max-width: 420px;
+    margin-bottom: 15px;
+    border: 1px solid #333;
+  }
+  .file-group { margin-bottom: 8px; font-size: 12px; }
+  .file-group label { display: block; color: #aaa; margin-bottom: 3px; }
+  input[type="file"] {
+    width: 100%;
+    background: #2a2a2a;
+    color: #fff;
+    padding: 6px;
+    border-radius: 5px;
+    font-size: 12px;
+  }
+  .btn-row { display: flex; gap: 10px; margin-top: 12px; }
+  button {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  #playBtn { background: #3b82f6; color: white; }
+  #exportBtn { background: #facc15; color: #000; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #status { font-size: 12px; color: #4ade80; margin-top: 8px; text-align: center; }
+  canvas {
+    width: 100%;
+    max-width: 360px;
+    aspect-ratio: 9 / 16;
+    background: #f4f1ea;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+  }
+</style>
+</head>
+<body>
+
+<h2>🎬 Vox-Style வரலாற்று மர்மம் (30s)</h2>
+
+<div class="controls">
+  <div class="file-group"><label>1. கோவில் முழு தோற்றம் (0-6s):</label><input type="file" id="img0" accept="image/*"></div>
+  <div class="file-group"><label>2. கோபுர உச்சி / நிழல் படம் (6-13s):</label><input type="file" id="img1" accept="image/*"></div>
+  <div class="file-group"><label>3. 80 டன் கல் / சிற்பம் (13-21s):</label><input type="file" id="img2" accept="image/*"></div>
+  <div class="file-group"><label>4. சோழர் கட்டிடக்கலை படம் (21-30s):</label><input type="file" id="img3" accept="image/*"></div>
+  <div class="btn-row">
+    <button id="playBtn">▶ Preview (30s)</button>
+    <button id="exportBtn">⬇ Export Video</button>
+  </div>
+  <div id="status">படங்களைத் தேர்வு செய்து Preview அல்லது Export அழுத்தவும்</div>
+</div>
+
+<canvas id="voxCanvas" width="1080" height="1920"></canvas>
+
+<script>
+const canvas = document.getElementById('voxCanvas');
+const ctx = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
+
+const DURATION = 30; // 30 seconds
+const FPS = 30;
+let images = [null, null, null, null];
+let isPlaying = false;
+let startTime = 0;
+
+// Load uploaded images
+[0, 1, 2, 3].forEach(idx => {
+  document.getElementById(`img${idx}`).addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => { images[idx] = img; drawFrame(0); };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+});
+
+// Scenes Data (Vox Style)
+const scenes = [
+  { start: 0, end: 6, tag: "CHAPTER 01 // 1010 AD", title: "தஞ்சை பெரிய கோவில்", highlight: "அதிர வைக்கும் மர்மம்!", sub: "1,000 ஆண்டுகால பொறியியல் அதிசயம்" },
+  { start: 6, end: 13, tag: "FACT CHECK // 216 FEET", title: "தரையில் விழாத நிழல்?", highlight: "216 அடி உயர கோபுரம்", sub: "நண்பகலிலும் மர்மம் நீடிக்கிறது" },
+  { start: 13, end: 21, tag: "MYSTERY // 80 TONS", title: "80 டன் ஒற்றைக் கல்!", highlight: "கிரேன்கள் இல்லாத காலம்", sub: "உச்சிக்கு எப்படி கொண்டு செல்லப்பட்டது?" },
+  { start: 21, end: 30, tag: "CONCLUSION // CHOLA TECH", title: "அஸ்திவாரம் இல்லாத கட்டிடம்", highlight: "வரலாற்றின் அழியாத அதிசயம்", sub: "சோழர்களின் அறிவியல் சாதனை" }
+];
+
+// Draw Vox Paper Grid Background
+function drawVoxBackground(t) {
+  ctx.fillStyle = "#f3efe6"; // Warm Vox paper tone
+  ctx.fillRect(0, 0, 1080, 1920);
+
+  // Subtle moving grid lines
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.06)";
+  ctx.lineWidth = 2;
+  const offset = (t * 25) % 60;
+  for (let x = offset; x < 1080; x += 60) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 1920); ctx.stroke();
+  }
+  for (let y = offset; y < 1920; y += 60) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(1080, y); ctx.stroke();
+  }
+
+  // Top Vox Editorial Bar
+  ctx.fillStyle = "#18181b";
+  ctx.fillRect(0, 0, 1080, 110);
+  ctx.fillStyle = "#facc15";
+  ctx.fillRect(60, 35, 18, 40);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 34px 'Space Mono', monospace";
+  ctx.fillText("HISTORY EXPLAINED // TAMIL", 95, 67);
+}
+
+// Draw Cutout Card with Pan & Zoom
+function drawPhotoCutout(img, localT, sceneDur, idx) {
+  const cardX = 90, cardY = 240, cardW = 900, cardH = 880;
+  const progress = Math.min(localT / sceneDur, 1);
+  
+  // Subtle paper tilt & pop-in
+  const pop = Math.min(localT * 4, 1);
+  const angle = (idx % 2 === 0 ? -1 : 1) * 0.025 * Math.sin(progress * Math.PI);
+
+  ctx.save();
+  ctx.translate(cardX + cardW / 2, cardY + cardH / 2);
+  ctx.rotate(angle);
+  ctx.scale(0.95 + 0.05 * pop, 0.95 + 0.05 * pop);
+
+  // Drop Shadow (Paper Cutout effect)
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.fillRect(-cardW / 2 + 22, -cardH / 2 + 26, cardW, cardH);
+
+  // White Polaroid/Cutout Border
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(-cardW / 2, -cardH / 2, cardW, cardH);
+
+  // Inner Clip Area
+  const pad = 28;
+  const inW = cardW - pad * 2;
+  const inH = cardH - pad * 2;
+  ctx.beginPath();
+  ctx.rect(-inW / 2, -inH / 2, inW, inH);
+  ctx.clip();
+
+  if (img) {
+    // Ken Burns Smooth Pan & Zoom
+    const scale = 1.05 + progress * 0.18;
+    const panX = (idx % 2 === 0 ? -1 : 1) * (progress - 0.5) * 60;
+    const imgRatio = img.width / img.height;
+    const boxRatio = inW / inH;
+    let drawW, drawH;
+    if (imgRatio > boxRatio) {
+      drawH = inH * scale;
+      drawW = drawH * imgRatio;
+    } else {
+      drawW = inW * scale;
+      drawH = drawW / imgRatio;
+    }
+    ctx.drawImage(img, -drawW / 2 + panX, -drawH / 2, drawW, drawH);
+  } else {
+    // Default Placeholder Graphic if no image uploaded
+    ctx.fillStyle = "#27272a";
+    ctx.fillRect(-inW / 2, -inH / 2, inW, inH);
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 46px 'Noto Sans Tamil'";
+    ctx.textAlign = "center";
+    ctx.fillText(`காட்சி ${idx + 1} படம்`, 0, -10);
+    ctx.fillStyle = "#a1a1aa";
+    ctx.font = "30px 'Noto Sans Tamil'";
+    ctx.fillText("(மேலே Image Upload செய்யவும்)", 0, 50);
+  }
+
+  // Halftone / Vintage Tint Overlay
+  ctx.fillStyle = "rgba(250, 204, 21, 0.08)";
+  ctx.fillRect(-inW / 2, -inH / 2, inW, inH);
+  ctx.restore();
+
+  // Vox Yellow Tape Strip on Top Corner
+  ctx.save();
+  ctx.translate(cardX + cardW / 2, cardY + 10);
+  ctx.rotate(-0.04);
+  ctx.fillStyle = "rgba(250, 204, 21, 0.85)";
+  ctx.fillRect(-130, -25, 260, 50);
+  ctx.restore();
+}
+
+// Draw Vox Kinetic Typography & Yellow Highlight
+function drawTypography(scene, localT) {
+  const baseY = 1230;
+  ctx.textAlign = "left";
+
+  // Tag Pill
+  ctx.fillStyle = "#18181b";
+  ctx.fillRect(90, baseY - 45, 480, 52);
+  ctx.fillStyle = "#facc15";
+  ctx.font = "bold 28px 'Space Mono', monospace";
+  ctx.fillText(scene.tag, 110, baseY - 10);
+
+  // Main Title
+  ctx.fillStyle = "#111111";
+  ctx.font = "800 62px 'Noto Sans Tamil'";
+  ctx.fillText(scene.title, 90, baseY + 95);
+
+  // Animated Yellow Marker Highlight behind Key Phrase
+  const wipe = Math.min(localT * 2.2, 1);
+  ctx.font = "800 64px 'Noto Sans Tamil'";
+  const textW = ctx.measureText(scene.highlight).width + 36;
+  ctx.fillStyle = "#facc15";
+  ctx.fillRect(85, baseY + 135, textW * wipe, 88);
+
+  // Highlighted Text
+  ctx.fillStyle = "#000000";
+  ctx.fillText(scene.highlight, 102, baseY + 202);
+
+  // Subtitle
+  ctx.fillStyle = "#3f3f46";
+  ctx.font = "600 40px 'Noto Sans Tamil'";
+  ctx.fillText(scene.sub, 90, baseY + 300);
+
+  // Bottom Progress Bar
+  ctx.fillStyle = "#d4d4d8";
+  ctx.fillRect(90, 1790, 900, 14);
+  ctx.fillStyle = "#dc2626";
+  const totalProgress = (scene.start + localT) / DURATION;
+  ctx.fillRect(90, 1790, 900 * Math.min(totalProgress, 1), 14);
+}
+
+function drawFrame(t) {
+  drawVoxBackground(t);
+  let idx = scenes.findIndex(s => t >= s.start && t < s.end);
+  if (idx === -1) idx = scenes.length - 1;
+  const scene = scenes[idx];
+  const localT = Math.max(0, t - scene.start);
+  const sceneDur = scene.end - scene.start;
+
+  drawPhotoCutout(images[idx], localT, sceneDur, idx);
+  drawTypography(scene, localT);
+}
+
+// Preview Loop
+document.getElementById('playBtn').addEventListener('click', () => {
+  if (isPlaying) return;
+  isPlaying = true;
+  startTime = performance.now();
+  statusEl.textContent = "Preview ஓடுகிறது (30 வினாடிகள்)...";
+
+  function loop(now) {
+    const elapsed = (now - startTime) / 1000;
+    if (elapsed >= DURATION) {
+      drawFrame(DURATION - 0.01);
+      isPlaying = false;
+      statusEl.textContent = "Preview முடிந்தது!";
+      return;
+    }
+    drawFrame(elapsed);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+});
+
+// Export Video (WebM)
+document.getElementById('exportBtn').addEventListener('click', () => {
+  if (isPlaying) return;
+  isPlaying = true;
+  document.getElementById('playBtn').disabled = true;
+  document.getElementById('exportBtn').disabled = true;
+
+  const stream = canvas.captureStream(FPS);
+  const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 5000000 });
+  const chunks = [];
+
+  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'thanjavur_vox_mystery_30s.webm';
+    a.click();
+    isPlaying = false;
+    document.getElementById('playBtn').disabled = false;
+    document.getElementById('exportBtn').disabled = false;
+    statusEl.textContent = "✅ வீடியோ டவுன்லோட் ஆகிவிட்டது! CapCut-ல் ஆடியோ சேர்க்கவும்.";
+  };
+
+  recorder.start();
+  startTime = performance.now();
+  statusEl.textContent = "⏳ வீடியோ ரெக்கார்ட் ஆகிறது (30s)... திரையை மூட வேண்டாம்.";
+
+  function recordLoop(now) {
+    const elapsed = (now - startTime) / 1000;
+    if (elapsed >= DURATION) {
+      drawFrame(DURATION - 0.01);
+      recorder.stop();
+      return;
+    }
+    drawFrame(elapsed);
+    statusEl.textContent = `⏳ ரெக்கார்டிங்: ${Math.floor(elapsed)}s / 30s`;
+    requestAnimationFrame(recordLoop);
+  }
+  requestAnimationFrame(recordLoop);
+});
+
+drawFrame(0);
+</script>
+</body>
+</html>
