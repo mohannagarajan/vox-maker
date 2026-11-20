@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vox Documentary V3 // 8-Photo Stack & Satellite Map</title>
+<title>2.5D Paper-Cutout Pop-Up Diorama Engine</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@600;800;900&family=Space+Mono:wght@700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@700;900&family=Space+Mono:wght@700&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    background: #09090b;
+    background: #0d1117;
     color: #fff;
     font-family: 'Noto Sans Tamil', sans-serif;
     display: flex;
@@ -18,18 +18,18 @@
   }
   h2 { color: #facc15; font-size: 16px; margin-bottom: 8px; text-align: center; }
   .panel {
-    background: #18181b;
+    background: #161b22;
     padding: 10px;
     border-radius: 12px;
     width: 100%;
     max-width: 420px;
     margin-bottom: 12px;
-    border: 1px solid #27272a;
+    border: 1px solid #30363d;
   }
-  .hint { font-size: 11px; color: #a1a1aa; margin-bottom: 8px; line-height: 1.4; }
+  .hint { font-size: 11px; color: #8b949e; margin-bottom: 8px; }
   .file-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 10px; }
-  .file-box { background: #222227; padding: 5px; border-radius: 6px; font-size: 9px; color: #e4e4e7; text-align: center; border: 1px dashed #3f3f46; }
-  .file-box.loaded { border-color: #4ade80; background: #14291d; }
+  .file-box { background: #21262d; padding: 5px; border-radius: 6px; font-size: 9px; color: #e6edf3; text-align: center; border: 1px dashed #484f58; }
+  .file-box.loaded { border-color: #3fb950; background: #132a1c; }
   .file-box input { width: 100%; margin-top: 3px; font-size: 8px; }
   .btn-row { display: flex; gap: 8px; }
   button {
@@ -45,12 +45,12 @@
   #stopBtn { background: #dc2626; color: #fff; flex: 0.45; }
   #exportBtn { background: #facc15; color: #09090b; }
   button:disabled { opacity: 0.45; }
-  #status { font-size: 12px; color: #4ade80; margin-top: 8px; text-align: center; font-weight: 600; }
+  #status { font-size: 12px; color: #3fb950; margin-top: 8px; text-align: center; font-weight: 600; }
   canvas {
     width: 100%;
     max-width: 360px;
     aspect-ratio: 9 / 16;
-    background: #18181b;
+    background: #1e3a5f;
     border-radius: 12px;
     box-shadow: 0 14px 40px rgba(0,0,0,0.85);
   }
@@ -58,10 +58,10 @@
 </head>
 <body>
 
-<h2>🎥 VOX PRO V3 // 8-PHOTO STACK & SATELLITE</h2>
+<h2>✂️ 2.5D PAPER-CUTOUT POP-UP ENGINE (FREE)</h2>
 
 <div class="panel">
-  <div class="hint">📸 8 படங்களை வரிசையாக அப்லோட் செய்யுங்கள் (Whip-Pan Stack + Satellite Map + SFX):</div>
+  <div class="hint">📄 8 படங்களை அப்லோட் செய்யுங்கள்—ஒவ்வொரு காட்சியிலும் காகித அடுக்குகளாக Pop-Up ஆகும்:</div>
   <div class="file-grid">
     <div class="file-box" id="box0">1. கோவில் முழுசு<input type="file" id="img0" accept="image/*"></div>
     <div class="file-box" id="box1">2. சிற்பத் தூண்<input type="file" id="img1" accept="image/*"></div>
@@ -87,11 +87,11 @@ const canvas = document.getElementById('voxCanvas');
 const ctx = canvas.getContext('2d');
 const statusEl = document.getElementById('status');
 
-const W = 720, H = 1280, DURATION = 30, FPS = 30;
+const W = 720, H = 1280, DURATION = 24, FPS = 30;
 let userImgs = new Array(8).fill(null);
 let animTimer = null, mediaRecorder = null, startTime = 0;
 
-// Built-in Web Audio SFX Engine
+// Web Audio Paper Rustle & Pop SFX
 let audioCtx = null, audioDest = null;
 function initAudio() {
   if (!audioCtx) {
@@ -101,7 +101,7 @@ function initAudio() {
   if (audioCtx.state === 'suspended') audioCtx.resume();
 }
 
-function playSFX(type) {
+function playPopSFX() {
   if (!audioCtx) return;
   const now = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
@@ -110,30 +110,14 @@ function playSFX(type) {
   gain.connect(audioCtx.destination);
   if (audioDest) gain.connect(audioDest);
 
-  if (type === 'whoosh') {
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(160, now);
-    osc.frequency.exponentialRampToValueAtTime(42, now + 0.32);
-    gain.gain.setValueAtTime(0.24, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
-    osc.start(now); osc.stop(now + 0.33);
-  } else if (type === 'click') {
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(980, now);
-    osc.frequency.exponentialRampToValueAtTime(240, now + 0.07);
-    gain.gain.setValueAtTime(0.2, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
-    osc.start(now); osc.stop(now + 0.08);
-  } else if (type === 'ping') {
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(1250, now);
-    gain.gain.setValueAtTime(0.18, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
-    osc.start(now); osc.stop(now + 0.25);
-  }
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(220, now);
+  osc.frequency.exponentialRampToValueAtTime(520, now + 0.09);
+  gain.gain.setValueAtTime(0.18, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+  osc.start(now); osc.stop(now + 0.12);
 }
 
-// Load 8 user images
 for (let idx = 0; idx < 8; idx++) {
   document.getElementById(`img${idx}`).addEventListener('change', e => {
     const file = e.target.files[0];
@@ -154,274 +138,233 @@ for (let idx = 0; idx < 8; idx++) {
   });
 }
 
-// Satellite Terrain Map Texture
-const satMap = document.createElement('canvas');
-satMap.width = 1000; satMap.height = 1000;
-const mCtx = satMap.getContext('2d');
-(function buildSatellite() {
-  mCtx.fillStyle = "#19241e";
-  mCtx.fillRect(0, 0, 1000, 1000);
-  for (let i = 0; i < 450; i++) {
-    const x = Math.random() * 1000, y = Math.random() * 1000;
-    const w = 30 + Math.random() * 90, h = 20 + Math.random() * 70;
-    mCtx.fillStyle = i % 3 === 0 ? "rgba(38, 62, 46, 0.55)" : (i % 3 === 1 ? "rgba(65, 58, 40, 0.45)" : "rgba(20, 32, 27, 0.6)");
-    mCtx.fillRect(x, y, w, h);
-  }
-  mCtx.strokeStyle = "#163a4d";
-  mCtx.lineWidth = 18;
-  mCtx.beginPath(); mCtx.moveTo(0, 320); mCtx.bezierCurveTo(350, 380, 650, 290, 1000, 340); mCtx.stroke();
-  mCtx.strokeStyle = "rgba(255,255,255,0.07)";
-  mCtx.lineWidth = 1;
-  for (let g = 0; g < 1000; g += 100) {
-    mCtx.beginPath(); mCtx.moveTo(g, 0); mCtx.lineTo(g, 1000); mCtx.stroke();
-    mCtx.beginPath(); mCtx.moveTo(0, g); mCtx.lineTo(1000, g); mCtx.stroke();
-  }
-})();
-
-// Film Grain
-const grain = document.createElement('canvas');
-grain.width = 180; grain.height = 320;
-const gCtx = grain.getContext('2d');
-const gData = gCtx.createImageData(180, 320);
-for (let i = 0; i < gData.data.length; i += 4) {
-  const v = Math.random() * 255;
-  gData.data[i] = v; gData.data[i+1] = v; gData.data[i+2] = v; gData.data[i+3] = 14;
+// Paper Texture Overlay
+const paperTex = document.createElement('canvas');
+paperTex.width = 240; paperTex.height = 426;
+const pCtx = paperTex.getContext('2d');
+const pData = pCtx.createImageData(240, 426);
+for (let i = 0; i < pData.data.length; i += 4) {
+  const v = 200 + Math.random() * 55;
+  pData.data[i] = v; pData.data[i+1] = v - 5; pData.data[i+2] = v - 15; pData.data[i+3] = 18;
 }
-gCtx.putImageData(gData, 0, 0);
+pCtx.putImageData(pData, 0, 0);
 
-const captions = [
-  { start: 0.0, end: 3.75, words: ["ஆயிரம்", "ஆண்டுகளுக்கு", "முன்பு", "கட்டப்பட்ட", "தஞ்சை", "பெரிய", "கோவில்..."] },
-  { start: 3.75, end: 7.5, words: ["இன்றும்", "பொறியாளர்களை", "அதிர", "வைக்கும்", "ஒரு", "மர்மம்!"] },
-  { start: 7.5, end: 11.25, words: ["60", "கிலோமீட்டர்", "தொலைவிலிருந்து", "கொண்டு", "வரப்பட்ட", "கற்கள்..."] },
-  { start: 11.25, end: 15.0, words: ["பிரம்மாண்ட", "சாய்வுதளம்", "வழியாக", "மேலே", "ஏற்றப்பட்ட", "அதிசயம்!"] },
-  { start: 15.0, end: 18.75, words: ["216", "அடி", "உயரத்தில்", "நிழலே", "விழாத", "கோபுர", "அமைப்பு!"] },
-  { start: 18.75, end: 22.5, words: ["உச்சியில்", "இருக்கும்", "80", "டன்", "ஒற்றைக்", "கல்", "எப்படி", "சென்றது?"] },
-  { start: 22.5, end: 26.25, words: ["சிமெண்ட்", "இல்லாமல்", "ஒன்றோடு", "ஒன்று", "பூட்டப்பட்ட", "கற்கள்..."] },
-  { start: 26.25, end: 30.0, words: ["சோழர்களின்", "அறிவியல்", "வரலாற்றின்", "அழியாத", "சாதனை!"] }
-];
+// Spring Bounce Easing for Pop-Up Layers
+function springPop(t) {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return 1 - Math.pow(2, -10 * t) * Math.cos((t * 10 - 0.75) * (2 * Math.PI / 3));
+}
 
-const labels = [
-  "FIG 01 // BRIHADEESWARAR 1010 AD",
-  "FIG 02 // CHOLA SCULPTURE",
-  "FIG 03 // NARTHAMALAI QUARRY",
-  "FIG 04 // 6 KM EARTHEN RAMP",
-  "FIG 05 // 216 FT VIMANA SHADOW",
-  "FIG 06 // 80-TON MONOLITH",
-  "FIG 07 // INTERLOCKING GRANITE",
-  "FIG 08 // CHOLA ENGINEERING"
-];
-
-function drawPhotoCard(img, cx, cy, w, h, rot, scale, labelText, idx) {
+// Draw Paper-Cutout Cloud
+function drawPaperCloud(x, y, scale) {
   ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(rot);
+  ctx.translate(x, y);
   ctx.scale(scale, scale);
+  ctx.shadowColor = "rgba(0,0,0,0.28)";
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetY = 10;
+  ctx.fillStyle = "#f4efe6";
+  ctx.beginPath();
+  ctx.arc(0, 0, 45, 0, Math.PI * 2);
+  ctx.arc(42, -10, 52, 0, Math.PI * 2);
+  ctx.arc(90, 0, 42, 0, Math.PI * 2);
+  ctx.arc(125, 10, 32, 0, Math.PI * 2);
+  ctx.arc(-35, 10, 32, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
 
-  ctx.fillStyle = "rgba(0,0,0,0.48)";
-  ctx.fillRect(-w/2 + 14, -h/2 + 18, w, h);
+// Draw Layered Paper Hills / Waves at Bottom
+function drawPaperWaveLayer(yBase, color, amp, freq, phase, popProgress) {
+  const offsetY = (1 - popProgress) * 320;
+  ctx.save();
+  ctx.translate(0, offsetY);
+  ctx.shadowColor = "rgba(0,0,0,0.42)";
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = -8;
 
-  ctx.fillStyle = "#f7f3eb";
-  ctx.fillRect(-w/2, -h/2, w, h);
+  // White Paper Cut Edge
+  ctx.fillStyle = "#f8f4ec";
+  ctx.beginPath();
+  ctx.moveTo(-20, H);
+  for (let x = -20; x <= W + 20; x += 20) {
+    const wy = yBase - 8 + Math.sin(x * freq + phase) * amp;
+    ctx.lineTo(x, wy);
+  }
+  ctx.lineTo(W + 20, H);
+  ctx.closePath();
+  ctx.fill();
 
-  const pad = 16;
-  const iw = w - pad*2, ih = h - pad*2 - 36;
+  // Inner Colored Paper Layer
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(-20, H);
+  for (let x = -20; x <= W + 20; x += 20) {
+    const wy = yBase + Math.sin(x * freq + phase) * amp;
+    ctx.lineTo(x, wy);
+  }
+  ctx.lineTo(W + 20, H);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// Draw Die-Cut Paper Pop-Up Photo Card
+function drawPaperCutoutCard(img, cx, cy, w, h, popP, tilt, fallbackLabel) {
+  if (popP <= 0.01) return;
+  const slideY = (1 - popP) * 520;
+  const sc = 0.75 + 0.25 * popP;
+
+  ctx.save();
+  ctx.translate(cx, cy + slideY);
+  ctx.rotate(tilt);
+  ctx.scale(sc, sc);
+
+  // Heavy 3D Diorama Shadow
+  ctx.shadowColor = "rgba(0,0,0,0.55)";
+  ctx.shadowBlur = 26;
+  ctx.shadowOffsetX = 10;
+  ctx.shadowOffsetY = 18;
+
+  // Thick Hand-Cut White Paper Border (Die-cut look)
+  const border = 20;
+  ctx.fillStyle = "#faf6ee";
+  ctx.beginPath();
+  ctx.roundRect(-w/2 - border, -h/2 - border, w + border*2, h + border*2, 18);
+  ctx.fill();
+
+  ctx.shadowColor = "transparent";
+
   if (img) {
     const rImg = img.width / img.height;
-    const rBox = iw / ih;
+    const rBox = w / h;
     let dw, dh;
-    if (rImg > rBox) { dh = ih; dw = dh * rImg; }
-    else { dw = iw; dh = dw / rImg; }
+    if (rImg > rBox) { dh = h; dw = dh * rImg; }
+    else { dw = w; dh = dw / rImg; }
     ctx.save();
-    ctx.beginPath(); ctx.rect(-iw/2, -h/2 + pad, iw, ih); ctx.clip();
-    ctx.drawImage(img, -dw/2, -h/2 + pad + (ih - dh)/2, dw, dh);
+    ctx.beginPath();
+    ctx.roundRect(-w/2, -h/2, w, h, 10);
+    ctx.clip();
+    ctx.drawImage(img, -dw/2, -dh/2, dw, dh);
     ctx.restore();
   } else {
-    ctx.fillStyle = "#27272a";
-    ctx.fillRect(-iw/2, -h/2 + pad, iw, ih);
+    ctx.fillStyle = "#263238";
+    ctx.fillRect(-w/2, -h/2, w, h);
     ctx.fillStyle = "#facc15";
-    ctx.font = "800 22px 'Noto Sans Tamil'";
+    ctx.font = "800 24px 'Noto Sans Tamil'";
     ctx.textAlign = "center";
-    ctx.fillText(`படம் ${idx + 1} அப்லோட் செய்யவும்`, 0, -5);
+    ctx.fillText(fallbackLabel, 0, 8);
   }
-
-  ctx.fillStyle = "#18181b";
-  ctx.font = "bold 18px 'Space Mono'";
-  ctx.textAlign = "left";
-  ctx.fillText(labelText, -iw/2, h/2 - 14);
-
-  ctx.fillStyle = "rgba(250, 204, 21, 0.85)";
-  ctx.fillRect(-65, -h/2 - 12, 130, 24);
   ctx.restore();
 }
 
-// 8-Photo Whip-Pan Stack + Satellite Map Overlay (7.5s - 15s)
-function renderStage(t) {
-  ctx.fillStyle = "#141417";
-  ctx.fillRect(0, 0, W, H);
-
-  // Subtle Grid
-  ctx.strokeStyle = "rgba(255,255,255,0.05)";
-  for (let y = 80; y < 800; y += 38) {
-    ctx.beginPath(); ctx.moveTo(35, y); ctx.lineTo(685, y); ctx.stroke();
+const scenes = [
+  {
+    skyTop: "#1d4ed8", skyBot: "#93c5fd",
+    wave1: "#1e3a8a", wave2: "#1d4ed8", wave3: "#d97706",
+    imgA: 0, imgB: 1,
+    caption: "ஆயிரம் ஆண்டுகளுக்கு முன்பு கட்டப்பட்ட தஞ்சை பெரிய கோவில்..."
+  },
+  {
+    skyTop: "#b45309", skyBot: "#fde68a",
+    wave1: "#78350f", wave2: "#92400e", wave3: "#b45309",
+    imgA: 2, imgB: 3,
+    caption: "60 கி.மீ தொலைவிலிருந்து சாய்வுதளம் வழியாக வந்த கற்கள்!"
+  },
+  {
+    skyTop: "#0369a1", skyBot: "#bae6fd",
+    wave1: "#065f46", wave2: "#047857", wave3: "#10b981",
+    imgA: 4, imgB: 5,
+    caption: "216 அடி உயரத்தில் நிழலே விழாத 80 டன் ஒற்றைக் கல்!"
+  },
+  {
+    skyTop: "#311042", skyBot: "#f97316",
+    wave1: "#1e1b4b", wave2: "#312e81", wave3: "#4338ca",
+    imgA: 6, imgB: 7,
+    caption: "சிமெண்ட் இல்லாமல் புவியீர்ப்பு விசையை வென்ற சோழர் அதிசயம்!"
   }
-
-  // Satellite Map Section between 7.5s and 15.0s
-  if (t >= 7.5 && t < 15.0) {
-    const localT = t - 7.5;
-    const p = localT / 7.5;
-    ctx.save();
-    ctx.beginPath(); ctx.rect(40, 88, 640, 695); ctx.clip();
-
-    const zoom = 1.0 + p * 0.65;
-    ctx.save();
-    ctx.translate(360, 435);
-    ctx.scale(zoom, zoom);
-    ctx.translate(-480 + p * 80, -450 + p * 60);
-    ctx.drawImage(satMap, 0, 0);
-
-    const qx = 340, qy = 560, tx = 580, ty = 390;
-    const routeP = Math.min(p * 1.4, 1);
-
-    ctx.strokeStyle = "#ef4444";
-    ctx.lineWidth = 7;
-    ctx.beginPath(); ctx.moveTo(qx, qy); ctx.lineTo(qx + (tx-qx)*routeP, qy + (ty-qy)*routeP); ctx.stroke();
-
-    ctx.fillStyle = "#facc15";
-    ctx.beginPath(); ctx.arc(qx, qy, 10, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = "#fff";
-    ctx.font = "800 16px 'Noto Sans Tamil'";
-    ctx.fillText("நார்த்தாமலை குவாரி", qx - 65, qy + 30);
-
-    if (routeP > 0.75) {
-      ctx.fillStyle = "#ef4444";
-      ctx.beginPath(); ctx.arc(tx, ty, 12, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = "#facc15";
-      ctx.fillText("தஞ்சை கோவில் (60 KM)", tx - 65, ty - 20);
-    }
-    ctx.restore();
-
-    // Floating Photo Stack PiP for Image 3 (Quarry) & Image 4 (Ramp)
-    if (localT < 3.75) {
-      const d = Math.min(localT * 4, 1);
-      drawPhotoCard(userImgs[2], 520 + (1-d)*300, 620, 260, 260, 0.05, 1, labels[2], 2);
-    } else {
-      const d = Math.min((localT - 3.75) * 4, 1);
-      drawPhotoCard(userImgs[3], 520 + (1-d)*300, 620, 260, 260, -0.04, 1, labels[3], 3);
-    }
-
-    ctx.strokeStyle = "#facc15"; ctx.lineWidth = 3;
-    ctx.strokeRect(40, 88, 640, 695);
-    ctx.restore();
-    return;
-  }
-
-  // Whip-Pan Stacked Photos for remaining segments (each 3.75s)
-  const slot = Math.min(Math.floor(t / 3.75), 7);
-  const localT = t - slot * 3.75;
-  const drop = Math.min(localT * 4.5, 1);
-
-  // Render previous 2 cards underneath for realistic tabletop photo stack
-  for (let i = Math.max(0, slot - 2); i < slot; i++) {
-    if (i === 2 || i === 3) continue; // Map segment
-    const rot = (i % 2 === 0 ? -1 : 1) * 0.05;
-    drawPhotoCard(userImgs[i], 360 + (i%2===0?-18:18), 445, 530, 530, rot, 0.96, labels[i], i);
-  }
-
-  // Active Top Card with Whip-Pan entry & smooth Ken Burns zoom
-  const dir = slot % 2 === 0 ? -1 : 1;
-  const enterX = dir * (1 - drop) * 520;
-  const rot = dir * 0.02 * (1 - localT / 3.75);
-  const zoom = 1.0 + (localT / 3.75) * 0.09;
-  drawPhotoCard(userImgs[slot], 360 + enterX, 445, 545, 545, rot, zoom, labels[slot], slot);
-
-  // Highlight Callout Badges on Key Shots
-  if (slot === 4) {
-    ctx.fillStyle = "#facc15"; ctx.fillRect(50, 95, 290, 42);
-    ctx.fillStyle = "#000"; ctx.font = "900 20px 'Noto Sans Tamil'";
-    ctx.fillText("☀️ 216 அடி நிழல் மர்மம்", 65, 123);
-  } else if (slot === 5) {
-    ctx.fillStyle = "#dc2626"; ctx.fillRect(50, 95, 295, 42);
-    ctx.fillStyle = "#fff"; ctx.font = "900 20px 'Noto Sans Tamil'";
-    ctx.fillText("🪨 80 டன் ஒற்றைக் கல்!", 65, 123);
-  } else if (slot === 6) {
-    ctx.fillStyle = "#facc15"; ctx.fillRect(50, 95, 340, 42);
-    ctx.fillStyle = "#000"; ctx.font = "900 20px 'Noto Sans Tamil'";
-    ctx.fillText("🧩 சிமெண்ட் இல்லாத தொழில்நுட்பம்", 65, 123);
-  }
-}
-
-function renderSubtitles(t) {
-  ctx.fillStyle = "#09090b";
-  ctx.fillRect(0, 805, W, 475);
-  ctx.fillStyle = "#facc15";
-  ctx.fillRect(0, 805, W, 4);
-
-  const cap = captions.find(c => t >= c.start && t <= c.end);
-  if (!cap) return;
-
-  const progress = (t - cap.start) / (cap.end - cap.start);
-  const activeIdx = Math.min(Math.floor(progress * cap.words.length), cap.words.length - 1);
-
-  let cx = 48, cy = 895;
-  const maxW = 624;
-  ctx.textAlign = "left";
-  ctx.font = "900 35px 'Noto Sans Tamil'";
-
-  cap.words.forEach((word, i) => {
-    const ww = ctx.measureText(word).width + 20;
-    if (cx + ww > 48 + maxW) { cx = 48; cy += 66; }
-
-    if (i === activeIdx) {
-      ctx.save();
-      ctx.translate(cx + ww/2, cy - 14);
-      ctx.scale(1.07, 1.07);
-      ctx.fillStyle = "#facc15";
-      ctx.fillRect(-ww/2, -32, ww, 52);
-      ctx.fillStyle = "#000";
-      ctx.textAlign = "center";
-      ctx.fillText(word, 0, 10);
-      ctx.restore();
-    } else {
-      ctx.fillStyle = i < activeIdx ? "#ffffff" : "#71717a";
-      ctx.fillText(word, cx + 8, cy - 4);
-    }
-    cx += ww + 8;
-  });
-
-  ctx.fillStyle = "#27272a";
-  ctx.fillRect(48, 1220, 624, 10);
-  ctx.fillStyle = "#ef4444";
-  ctx.fillRect(48, 1220, 624 * Math.min(t / DURATION, 1), 10);
-}
+];
 
 function drawFrame(t) {
+  const sceneDur = 6.0;
+  const sIdx = Math.min(Math.floor(t / sceneDur), 3);
+  const lt = t - sIdx * sceneDur;
+  const sc = scenes[sIdx];
+
+  // 1. Paper Sky Gradient
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, sc.skyTop);
+  grad.addColorStop(1, sc.skyBot);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // 2. Pop-up Sun / Moon (0.2s)
+  const sunP = springPop(Math.min((lt - 0.1) / 0.9, 1));
   ctx.save();
-  ctx.translate(Math.sin(t*2.1)*2.5, Math.cos(t*1.8)*2.5);
-  renderStage(t);
-
-  ctx.fillStyle = "rgba(9,9,11,0.92)";
-  ctx.fillRect(0, 0, W, 68);
-  ctx.fillStyle = "#ef4444";
-  ctx.fillRect(36, 18, 12, 32);
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 20px 'Space Mono'";
-  ctx.textAlign = "left";
-  ctx.fillText("VOX DOCUMENTARY // 8-PHOTO ARCHIVE", 58, 41);
-
-  renderSubtitles(t);
-  ctx.drawImage(grain, 0, 0, W, H);
+  ctx.translate(540, 230 + (1 - sunP) * 260);
+  ctx.shadowColor = "rgba(0,0,0,0.25)";
+  ctx.shadowBlur = 15;
+  ctx.fillStyle = sIdx === 3 ? "#fef08a" : "#facc15";
+  ctx.beginPath(); ctx.arc(0, 0, 68, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
+
+  // 3. Sliding Paper Clouds (0.4s)
+  const cloudP = springPop(Math.min((lt - 0.3) / 1.0, 1));
+  drawPaperCloud(-160 + cloudP * 300 + lt * 12, 190, 1.05);
+  drawPaperCloud(W + 160 - cloudP * 280 - lt * 10, 310, 0.85);
+
+  // 4. Back Paper Diorama Layer (1.0s)
+  drawPaperWaveLayer(720, sc.wave1, 22, 0.012, lt * 1.5, springPop(Math.min((lt - 0.8) / 0.9, 1)));
+
+  // 5. Left/Back Cutout Photo Pop-Up (1.5s)
+  const card1P = springPop(Math.min((lt - 1.3) / 0.9, 1));
+  drawPaperCutoutCard(userImgs[sc.imgA], 255, 515, 370, 370, card1P, -0.05, `படம் ${sc.imgA + 1}`);
+
+  // 6. Middle Paper Wave / Ground Layer (2.1s)
+  drawPaperWaveLayer(815, sc.wave2, 26, 0.015, -lt * 1.8, springPop(Math.min((lt - 1.9) / 0.9, 1)));
+
+  // 7. Front/Right Cutout Photo Pop-Up (2.7s)
+  const card2P = springPop(Math.min((lt - 2.5) / 0.9, 1));
+  drawPaperCutoutCard(userImgs[sc.imgB], 465, 625, 385, 385, card2P, 0.04, `படம் ${sc.imgB + 1}`);
+
+  // 8. Foreground Paper Layer + Caption Banner (3.2s)
+  drawPaperWaveLayer(935, sc.wave3, 18, 0.01, lt * 1.2, springPop(Math.min((lt - 3.0) / 0.8, 1)));
+
+  // Paper Label Strip at Bottom
+  const capP = springPop(Math.min((lt - 3.3) / 0.8, 1));
+  ctx.save();
+  ctx.translate(W / 2, 1085 + (1 - capP) * 220);
+  ctx.shadowColor = "rgba(0,0,0,0.45)";
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = "#faf6ee";
+  ctx.beginPath(); ctx.roundRect(-320, -68, 640, 136, 14); ctx.fill();
+
+  ctx.fillStyle = "#111827";
+  ctx.font = "900 28px 'Noto Sans Tamil'";
+  ctx.textAlign = "center";
+  const words = sc.caption.split(" ");
+  const mid = Math.ceil(words.length / 2);
+  ctx.fillText(words.slice(0, mid).join(" "), 0, -12);
+  ctx.fillText(words.slice(mid).join(" "), 0, 34);
+  ctx.restore();
+
+  // Tactile Paper Grain Overlay
+  ctx.drawImage(paperTex, 0, 0, W, H);
 }
 
-let triggered = {};
-function checkSFX(t) {
-  for (let i = 0; i < 8; i++) {
-    const cueTime = i * 3.75 + 0.05;
-    if (t >= cueTime && !triggered[i]) {
-      triggered[i] = true;
-      playSFX(i === 3 ? 'ping' : (i === 0 ? 'click' : 'whoosh'));
+// Pop Sound Cues
+let popHistory = {};
+function checkPopSFX(t) {
+  const sIdx = Math.min(Math.floor(t / 6.0), 3);
+  const lt = t - sIdx * 6.0;
+  [0.2, 0.8, 1.3, 1.9, 2.5, 3.0].forEach((offset, idx) => {
+    const key = `${sIdx}_${idx}`;
+    if (lt >= offset && !popHistory[key]) {
+      popHistory[key] = true;
+      playPopSFX();
     }
-  }
+  });
 }
 
 function stopAll() {
@@ -429,7 +372,7 @@ function stopAll() {
   if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop();
   document.getElementById('playBtn').disabled = false;
   document.getElementById('exportBtn').disabled = false;
-  triggered = {};
+  popHistory = {};
   drawFrame(0);
   statusEl.textContent = "⏹ நிறுத்தப்பட்டது";
 }
@@ -449,9 +392,9 @@ function startPreview() {
       statusEl.textContent = "✅ Preview முடிந்தது! Export அழுத்தவும்.";
       return;
     }
-    checkSFX(elapsed);
+    checkPopSFX(elapsed);
     drawFrame(elapsed);
-    statusEl.textContent = `▶ Preview: ${Math.floor(elapsed)}s / 30s`;
+    statusEl.textContent = `▶ Preview: ${Math.floor(elapsed)}s / ${DURATION}s`;
   }, 1000 / FPS);
 }
 
@@ -477,9 +420,9 @@ function startExport() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'vox_8photo_documentary_30s.webm';
+      a.download = 'paper_cutout_diorama_24s.webm';
       a.click();
-      statusEl.textContent = "✅ 8-Photo Pro Video டவுன்லோட் ஆகிவிட்டது!";
+      statusEl.textContent = "✅ Paper-Cutout Video டவுன்லோட் ஆகிவிட்டது!";
     }
     document.getElementById('playBtn').disabled = false;
     document.getElementById('exportBtn').disabled = false;
@@ -496,9 +439,9 @@ function startExport() {
       mediaRecorder.stop();
       return;
     }
-    checkSFX(elapsed);
+    checkPopSFX(elapsed);
     drawFrame(elapsed);
-    statusEl.textContent = `⏳ Export ரெக்கார்டிங்: ${Math.floor(elapsed)}s / 30s`;
+    statusEl.textContent = `⏳ Export ரெக்கார்டிங்: ${Math.floor(elapsed)}s / ${DURATION}s`;
   }, 1000 / FPS);
 }
 
